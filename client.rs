@@ -1,83 +1,93 @@
 use std::io::{Read, Write};
-//use std::net::{TcpListener, TcpStream};
-use std::net::{TcpStream};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::{io, thread};
 use std::process;
-//use rand::Rng;
+use std::sync::{Arc, Mutex};
 
-//server
-fn message_read(mut stream: TcpStream) {
+
+/**
+client
+*/
+fn message_read(reader: TcpStream) {
     let mut buffer = [0; 512];
+    let mut reader = reader;
 
     loop {
-        match stream.read(&mut buffer) {
+
+        match reader.read(&mut buffer) {
             Ok(bytes_read) => {
                 if bytes_read == 0 {
-                    //message_write(stream);
                     continue;
                 }
 
                 let message = String::from_utf8_lossy(&buffer[0..bytes_read]);
                 println!("{}", message);
-
-                //stream.write_all(message.as_bytes()).unwrap();
             }
             Err(_) => {
                 //to do
                 break;
             }
         }
-
     }
 
 }
 
+
 fn main() {
 
-    //thread::spawn(|| {
-        //let co_stream = TcpStream::connect("127.0.0.1:1315").expect("hahi");
+    let mut handles = vec![];
 
     let co_stream = TcpStream::connect(("127.0.0.1", 1315));
-    // while co_stream.is_err() {
-    //     co_stream = TcpStream::connect(("127.0.0.1", 1315));
-    // }
     if co_stream.is_err() {
         //exit
         eprintln!("Error: {}", co_stream.err().unwrap());
         process::exit(1);
     }
 
-    let co_stream = co_stream.expect("success");
-
-    let reader = co_stream.try_clone().expect("clone success");
-    let writer = co_stream.try_clone().expect("clone success");
-    //let writer = BufWriter::new(&co_stream);
-    thread::spawn(move || {
-        message_read(reader);
+    // read message
+    let co_stream = co_stream.expect("unwrap");
+    let copy_stream = co_stream.try_clone().unwrap();
+    let read = thread::spawn(move || {
+        message_read(copy_stream);
     });
-    thread::spawn(move || {
-        message_write(writer);
-    });
+    handles.push(read);
 
-    loop {
-        thread::park();
+    // send message
+    let mut addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127,0,0,1)), 00);
+    match co_stream.local_addr() {
+        Ok(value) => {
+            addr = value;
+        }
+        Err(_) => {}
+    }
+    let arc_stream = Arc::new(Mutex::new(co_stream));
+    let writer = Arc::clone(&arc_stream);
+
+    let write = thread::spawn(move || {
+        message_write(writer, addr);
+    });
+    handles.push(write);
+    // loop {
+    //     thread::park();
+    // }
+
+    for handle in handles {
+        handle.join().unwrap();
     }
 }
 
-fn message_write(mut writer: TcpStream) {
+fn message_write(writer: Arc<Mutex<TcpStream>>, addr: SocketAddr) {
 
-    //let mut co_stream = TcpStream::connect(addr).expect("hahi");
-    let ip = writer.local_addr().unwrap().ip().to_string();
-    let port = writer.local_addr().unwrap().port();
+    let _ip = addr.ip().to_string();
+    let _port = addr.port();
 
-    // Generate a random integer in the range [1, 100]
     loop {
         let mut input = String::new();
-        //print!("You: ");
         io::stdout().flush().unwrap(); // Flush the buffer to ensure the prompt is displayed
         io::stdin().read_line(&mut input).expect("Failed to read line");
-        input = ip.clone() + &port.to_string() + ": " + &input;
-        //writer.write_all(input.as_bytes()).expect("haha");
+        input = _ip.clone() + &_port.to_string() + ": " + &input;
+
+        let mut writer = writer.lock().unwrap();
         writer.write_all(input.as_bytes()).expect("haha");
     }
 }

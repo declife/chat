@@ -1,11 +1,16 @@
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::{io, thread};
+use std::{thread};
 //use std::borrow::Cow;
 //use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
 //use std::io::{self, Read};
+
+
+/**
+ server
+ */
 
 lazy_static! {
     static ref LISTENER: TcpListener = TcpListener::bind("127.0.0.1:1315").expect("Failed to bind address");
